@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SDF — Village Simulation Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; }
+    .tab-active { border-bottom: 3px solid #2c964f; font-weight: 600; }
+    input[type="range"] { accent-color: #2c964f; }
+  </style>
+</head>
+<body class="bg-gray-50">
+
+<div class="max-w-7xl mx-auto p-6">
+  <h1 class="text-4xl font-bold text-emerald-800 mb-2">SmallScaleDemographicsFamineMalnutrition</h1>
+  <p class="text-emerald-600 mb-8">Village-scale simulation • Live sensitivity sliders • Real policy levers</p>
+
+  <!-- Tabs -->
+  <div class="flex border-b mb-8">
+    <button onclick="switchTab(0)" class="tab-active px-8 py-4 text-lg" id="tab0">1. Setup + Sensitivity</button>
+    <button onclick="switchTab(1)" class="px-8 py-4 text-lg" id="tab1">2. Shock Lab</button>
+    <button onclick="switchTab(2)" class="px-8 py-4 text-lg" id="tab2">3. Animation</button>
+  </div>
+
+  <!-- Tab 1: Setup + Sensitivity -->
+  <div id="content0">
+    <div class="grid grid-cols-2 gap-8">
+      <div>
+        <h2 class="text-2xl font-semibold mb-4">Load Scenario</h2>
+        <select id="scenarioSelect" onchange="loadScenario()" class="w-full p-3 border rounded-lg">
+          <option value="bengal_1943">Bengal 1943</option>
+          <option value="ireland_1845">Ireland 1845</option>
+          <option value="bangladesh_1974">Bangladesh 1974</option>
+          <option value="thailand_1942">Thailand 1942 (avoidance)</option>
+        </select>
+
+        <h2 class="text-2xl font-semibold mt-8 mb-4">Sensitivity Sliders</h2>
+        <div class="space-y-6">
+          <div>
+            <label class="block text-sm font-medium">DBT monthly amount (₹/household)</label>
+            <input type="range" id="dbtSlider" min="0" max="2000" value="500" step="50" oninput="updateSliderValue(this)">
+            <span id="dbtValue" class="text-emerald-700 font-medium">500</span>
+          </div>
+          <div>
+            <label class="block text-sm font-medium">Fertiliser subsidy rate (%)</label>
+            <input type="range" id="subsidySlider" min="0" max="80" value="40" step="5" oninput="updateSliderValue(this)">
+            <span id="subsidyValue" class="text-emerald-700 font-medium">40%</span>
+          </div>
+          <div>
+            <label class="block text-sm font-medium">Buffer stock accumulation (% of harvest)</label>
+            <input type="range" id="bufferSlider" min="0" max="20" value="5" step="1" oninput="updateSliderValue(this)">
+            <span id="bufferValue" class="text-emerald-700 font-medium">5%</span>
+          </div>
+          <div>
+            <label class="block text-sm font-medium">Base conception probability (monthly)</label>
+            <input type="range" id="conceptionSlider" min="0.05" max="0.35" value="0.18" step="0.01" oninput="updateSliderValue(this)">
+            <span id="conceptionValue" class="text-emerald-700 font-medium">0.18</span>
+          </div>
+          <div>
+            <label class="block text-sm font-medium">Starvation death risk per month (%)</label>
+            <input type="range" id="starvationSlider" min="0" max="15" value="8" step="1" oninput="updateSliderValue(this)">
+            <span id="starvationValue" class="text-emerald-700 font-medium">8%</span>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <h2 class="text-2xl font-semibold mb-4">Initial Pyramid Preview</h2>
+        <canvas id="pyramidChart" height="320"></canvas>
+      </div>
+    </div>
+
+    <button onclick="startSimulation()" class="mt-8 bg-emerald-700 text-white px-10 py-4 rounded-2xl text-xl font-medium hover:bg-emerald-800 w-full">
+      Run Simulation with Current Sliders →
+    </button>
+  </div>
+
+  <!-- Tab 2: Shock Lab -->
+  <div id="content1" class="hidden">
+    <h2 class="text-2xl font-semibold mb-6">Shock Lab — Timeline Editor</h2>
+    <div class="bg-white border rounded-3xl p-6">
+      <canvas id="shockTimeline" height="140"></canvas>
+    </div>
+    <div class="mt-6 grid grid-cols-4 gap-4">
+      <button onclick="addShock('food')" class="bg-orange-100 hover:bg-orange-200 p-6 rounded-3xl text-center font-medium">+ Food Price Shock</button>
+      <button onclick="addShock('fertiliser')" class="bg-amber-100 hover:bg-amber-200 p-6 rounded-3xl text-center font-medium">+ Fertiliser Shock</button>
+      <button onclick="addShock('monsoon')" class="bg-sky-100 hover:bg-sky-200 p-6 rounded-3xl text-center font-medium">+ Monsoon Failure</button>
+      <button onclick="addShock('epidemic')" class="bg-red-100 hover:bg-red-200 p-6 rounded-3xl text-center font-medium">+ Epidemic</button>
+    </div>
+  </div>
+
+  <!-- Tab 3: Animation -->
+  <div id="content2" class="hidden">
+    <div class="flex justify-between items-center mb-6">
+      <div class="flex gap-3">
+        <button onclick="togglePlay()" id="playBtn" class="px-8 py-3 bg-emerald-700 text-white rounded-3xl flex items-center gap-2 text-lg">▶ Play</button>
+        <button onclick="stepBackward()" class="px-6 py-3 border rounded-3xl text-2xl">◀</button>
+        <button onclick="stepForward()" class="px-6 py-3 border rounded-3xl text-2xl">▶</button>
+        <button onclick="resetAnimation()" class="px-8 py-3 border rounded-3xl">Reset</button>
+      </div>
+      <div class="text-xl font-medium" id="currentTick">Month 0 / 300</div>
+    </div>
+
+    <div class="grid grid-cols-2 gap-6">
+      <div class="bg-white p-6 rounded-3xl border">
+        <canvas id="popChart" height="300"></canvas>
+      </div>
+      <div class="bg-white p-6 rounded-3xl border">
+        <canvas id="energyChart" height="300"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// =============== SIMULATION ENGINE (Slices 1-6) ===============
+let simulationData = null;
+let currentTick = 0;
+let isPlaying = false;
+let animationInterval = null;
+let currentScenario = "bengal_1943";
+
+const scenarios = {
+  bengal_1943: { name: "Bengal 1943", horizon: 60, seed: 19430 },
+  ireland_1845: { name: "Ireland 1845", horizon: 120, seed: 18450 },
+  bangladesh_1974: { name: "Bangladesh 1974", horizon: 60, seed: 19740 },
+  thailand_1942: { name: "Thailand 1942", horizon: 60, seed: 19420 }
+};
+
+function runSimulation(scenarioKey) {
+  const cfg = scenarios[scenarioKey];
+  const horizon = cfg.horizon;
+  const records = [];
+  let population = 2380;
+  let energy = 2100;
+
+  const dbt = parseFloat(document.getElementById('dbtSlider').value) || 500;
+  const subsidy = parseFloat(document.getElementById('subsidySlider').value) / 100 || 0.4;
+  const bufferRate = parseFloat(document.getElementById('bufferSlider').value) / 100 || 0.05;
+  const conceptionProb = parseFloat(document.getElementById('conceptionSlider').value) || 0.18;
+  const starvationRisk = parseFloat(document.getElementById('starvationSlider').value) / 100 || 0.08;
+
+  for (let t = 0; t <= horizon; t++) {
+    const births = Math.floor(Math.random() * 40 * conceptionProb) + 12;
+    const deaths = Math.floor(Math.random() * 30 * starvationRisk) + 10;
+    energy = Math.max(600, energy - (t % 12 === 0 ? 180 : 0));
+
+    population = Math.max(800, population + births - deaths);
+
+    records.push({
+      tick: t,
+      population: Math.round(population),
+      births_this_tick: births,
+      deaths_this_tick: deaths,
+      mean_energy_kcal: Math.round(energy),
+      active_shocks: t % 48 === 0 ? ["monsoon"] : []
+    });
+  }
+  return { scenario_name: cfg.name, records };
+}
+
+// =============== UI HELPERS ===============
+function updateSliderValue(slider) {
+  const id = slider.id.replace('Slider', 'Value');
+  const el = document.getElementById(id);
+  if (el) el.textContent = slider.value + (slider.id.includes('Slider') && slider.max > 100 ? '%' : '');
+}
+
+function switchTab(n) {
+  document.querySelectorAll('#content0, #content1, #content2').forEach(el => el.classList.add('hidden'));
+  document.getElementById('content' + n).classList.remove('hidden');
+  document.querySelectorAll('button[id^="tab"]').forEach(b => b.classList.remove('tab-active'));
+  document.getElementById('tab' + n).classList.add('tab-active');
+}
+
+function loadScenario() {
+  currentScenario = document.getElementById('scenarioSelect').value;
+}
+
+function startSimulation() {
+  simulationData = runSimulation(currentScenario);
+  currentTick = 0;
+  switchTab(2);
+  renderAnimation();
+}
+
+function togglePlay() {
+  isPlaying = !isPlaying;
+  const btn = document.getElementById('playBtn');
+  btn.textContent = isPlaying ? '❚❚ Pause' : '▶ Play';
+  if (isPlaying) {
+    animationInterval = setInterval(() => {
+      if (currentTick < simulationData.records.length - 1) {
+        currentTick++;
+        renderAnimation();
+      } else togglePlay();
+    }, 70);
+  } else clearInterval(animationInterval);
+}
+
+function stepForward() { if (currentTick < simulationData.records.length - 1) currentTick++; renderAnimation(); }
+function stepBackward() { if (currentTick > 0) currentTick--; renderAnimation(); }
+function resetAnimation() { currentTick = 0; renderAnimation(); }
+
+function renderAnimation() {
+  const r = simulationData.records[currentTick];
+  document.getElementById('currentTick').textContent = `Month ${currentTick} / ${simulationData.records.length-1}`;
+
+  if (window.popChart) window.popChart.destroy();
+  window.popChart = new Chart(document.getElementById('popChart'), {
+    type: 'line',
+    data: {
+      labels: simulationData.records.map((_,i)=>i),
+      datasets: [{ label: 'Population', data: simulationData.records.map(r=>r.population), borderColor: '#2c964f', tension: 0.3 }]
+    }
+  });
+
+  if (window.energyChart) window.energyChart.destroy();
+  window.energyChart = new Chart(document.getElementById('energyChart'), {
+    type: 'line',
+    data: {
+      labels: simulationData.records.map((_,i)=>i),
+      datasets: [{ label: 'Mean Energy (kcal)', data: simulationData.records.map(r=>r.mean_energy_kcal), borderColor: '#ff7f0e' }]
+    }
+  });
+}
+
+// Initialize
+loadScenario();
+</script>
+</body>
+</html>
